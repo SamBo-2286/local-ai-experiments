@@ -46,6 +46,8 @@ cmake -B build -DGGML_CUDA=ON -DGGML_RPC=ON
 Found by checking what was actually present in the build output directory rather than
 assuming the source itself was broken.
 
+![Confirming GGML_RPC=ON in the cached build config](images/two-pc-cluster-01-rpc-build-flag.png)
+
 ### 3. A renamed binary
 The binary name had changed between the version originally documented and the version built
 from current `master` — the systemd service was pointed at a path that no longer existed.

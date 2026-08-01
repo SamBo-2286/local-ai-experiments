@@ -48,6 +48,8 @@ print([a for a in dir(settings.DERIVER) if not a.startswith('_')])
 ['DEDUPLICATE', 'ENABLED', 'FLUSH_ENABLED', ..., 'MODEL_CONFIG', ...]
 ```
 
+![Introspecting the deriver container's live settings, showing MODEL_CONFIG instead of the expected PROVIDER/MODEL fields](images/hermes-agent-stack-01-honcho-config-drift.png)
+
 That output was the actual root cause: there was no `PROVIDER` or `MODEL` field at all —
 just `MODEL_CONFIG`. The fork I'd cloned (`--depth 1` off `main`) expected the *old* schema
 (`PROVIDER`, `MODEL`, `BACKUP_PROVIDER`, `BACKUP_MODEL`), but current upstream Honcho had
@@ -100,12 +102,23 @@ persisting between agent browsing sessions — meaning every session would've qu
 logged out, undermining the entire point of the live-view feature. Fixed by resolving the
 profile directory's write permissions before wiring up the persistent service.
 
+![cua-driver running as a persistent systemd --user service across both Hermes profiles](images/hermes-agent-stack-02-cua-driver-status.png)
+
 ## Outcome
 
 A working local agent stack with persistent cross-session memory (Mem0, in-process, no extra
 infrastructure), sandboxed code execution, and background services that survive reboots
 without manual restarting. This is active, ongoing work — memory-persistence tuning is still
 being refined based on real day-to-day use.
+
+![Mem0's Qdrant collection showing 67 real stored memories for the ollie profile](images/hermes-agent-stack-03-mem0-memory-count.png)
+
+Memory persistence is currently confirmed working on the `orchestrator` (`ollie`) profile;
+extraction on the `general` profile is still being tuned.
+
+The agent also writes directly into the connected Obsidian vault via MCP:
+
+![A note written into the Obsidian vault by the agent via MCP](images/hermes-agent-stack-04-obsidian-mcp-write.png)
 
 ## Lessons learned
 
