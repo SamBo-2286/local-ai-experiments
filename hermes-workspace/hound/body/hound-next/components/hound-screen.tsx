@@ -1,0 +1,395 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import { HudFullBleed } from "./hound-hud"
+
+const RED = "#e8232a"
+const CREAM = "#f2ecc0"
+const YELLOW = "#ece49a"
+
+// Boot bar fill times (ms): the idle loop waits for a keypress, the armed
+// final fill runs fast once one arrives.
+const BOOT_WAIT_FILL_MS = 1500
+const BOOT_ARM_FILL_MS = 900
+
+// Login credentials
+const VALID_USER = "ollie"
+const VALID_PASS = "skenn2000"
+
+type Screen = "boot" | "login" | "granted" | "hud"
+
+export function HoundScreen() {
+  const [screen, setScreen] = useState<Screen>("boot")
+  const [bootArmed, setBootArmed] = useState(false)
+
+  const goToLogin = useCallback(() => setScreen("login"), [])
+  const goToGranted = useCallback(() => setScreen("granted"), [])
+  const goToHud = useCallback(() => setScreen("hud"), [])
+  const armBoot = useCallback(() => setBootArmed(true), [])
+
+  // Any keypress during boot arms the sequence: the bar restarts, finishes
+  // fast, and advances to the login screen. No key = the bar loops forever.
+  useEffect(() => {
+    if (screen !== "boot" || bootArmed) return
+    window.addEventListener("keydown", armBoot)
+    return () => window.removeEventListener("keydown", armBoot)
+  }, [screen, bootArmed, armBoot])
+
+  // The main HUD is full-bleed — it renders OUTSIDE the square arcade panel.
+  if (screen === "hud") {
+    return <HudFullBleed />
+  }
+
+  return (
+    <main className="flex min-h-dvh w-full items-center justify-center bg-black p-3 sm:p-6">
+      {/* Screen panel — locked to a square, like the original arcade display.
+          container-type lets every child size itself with cqw/cqh units so the
+          whole composition scales as one unit regardless of viewport. */}
+      <div
+        className="relative aspect-square overflow-hidden bg-black"
+        style={{ containerType: "size", width: "min(92vw, 92vh, 760px)" }}
+      >
+        {/* Red frame */}
+        <div
+          className="pointer-events-none absolute inset-[2.5%] rounded-[14px] border-2"
+          style={{ borderColor: RED, boxShadow: `0 0 6px ${RED}55, inset 0 0 6px ${RED}22` }}
+          aria-hidden="true"
+        />
+
+        {/* CRT scanline overlay */}
+        <div className="scanlines pointer-events-none absolute inset-0 z-30" aria-hidden="true" />
+
+        {/* Top-left INSERT COIN box */}
+        <InsertCoinBox />
+
+        {/* WK logo — bottom right */}
+        <WkLogo />
+
+        {/* Center stack */}
+        <div className="absolute inset-0 z-20 flex flex-col items-center px-[7%] pb-[5%] pt-[3.5%]">
+          {/* Dog */}
+          <div className="flex w-full items-center justify-center" style={{ height: "56cqh" }}>
+            <img
+              src="/images/hound-dog.png"
+              alt="Rainbow pixel-art Shiba Inu"
+              className="h-full w-auto object-contain [image-rendering:pixelated]"
+              style={{ imageRendering: "pixelated", mixBlendMode: "screen" }}
+            />
+          </div>
+
+          {/* HOUND wordmark */}
+          <div className="-mt-[3cqh] w-full text-center leading-[0.82]">
+            <span
+              className="font-[family-name:var(--font-archivo-black)] tracking-[0.04em]"
+              style={{
+                color: CREAM,
+                fontSize: "18cqw",
+                textShadow: `0 0 10px ${CREAM}44`,
+              }}
+            >
+              HOUND
+              <sup
+                className="font-[family-name:var(--font-vt323)] leading-none"
+                style={{ fontSize: "0.26em", verticalAlign: "1.05em", letterSpacing: "0.04em" }}
+              >
+                oo
+              </sup>
+            </span>
+          </div>
+
+          {/* Japanese caption */}
+          <p
+            className="mt-[1cqh] w-full pr-[3cqw] text-right font-[family-name:var(--font-dot-gothic)] leading-none"
+            style={{ color: YELLOW, fontSize: "3.6cqw" }}
+          >
+            2000年アメリカ製
+          </p>
+
+          {/* Bottom cluster — swaps between boot, login, granted screens */}
+          {screen === "boot" ? (
+            <BootCluster armed={bootArmed} onComplete={goToLogin} />
+          ) : screen === "login" ? (
+            <LoginFields onLogin={goToGranted} />
+          ) : (
+            <GrantedScreen onComplete={goToHud} />
+          )}
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function BootCluster({
+  armed,
+  onComplete,
+}: {
+  armed: boolean
+  onComplete: () => void
+}) {
+  return (
+    <>
+      {/* Processing payment */}
+      <p
+        className="mt-[2.2cqh] w-full text-center font-[family-name:var(--font-dot-gothic)] leading-none"
+        style={{ color: RED, fontSize: "4.4cqw", textShadow: `0 0 6px ${RED}55` }}
+      >
+        Processing payment...
+      </p>
+
+      {/* Loading bar */}
+      <LoadingBar armed={armed} onComplete={onComplete} />
+
+      {/* Press any key */}
+      <p
+        className="mt-[1.6cqh] w-full text-center font-[family-name:var(--font-dot-gothic)] leading-none"
+        style={{ color: RED, fontSize: "4.4cqw", textShadow: `0 0 6px ${RED}55` }}
+      >
+        press any key to continue
+      </p>
+    </>
+  )
+}
+
+function LoadingBar({
+  armed,
+  onComplete,
+}: {
+  armed: boolean
+  onComplete: () => void
+}) {
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    // Idle: faster fill that loops until a key arrives. Armed: fast final
+    // fill that completes and advances to the login screen.
+    const duration = armed ? BOOT_ARM_FILL_MS : BOOT_WAIT_FILL_MS
+    let start = performance.now()
+    let frame = 0
+
+    const tick = (now: number) => {
+      const next = Math.min(100, ((now - start) / duration) * 100)
+      setProgress(next)
+      if (next < 100) {
+        frame = requestAnimationFrame(tick)
+      } else if (armed) {
+        onComplete()
+      } else {
+        // Still waiting on a key — restart the fill.
+        start = now
+        setProgress(0)
+        frame = requestAnimationFrame(tick)
+      }
+    }
+
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [armed, onComplete])
+
+  return (
+    <div
+      className="mt-[1.6cqh] rounded-[3px] border-2 p-[3px]"
+      style={{ borderColor: RED, boxShadow: `0 0 5px ${RED}44`, width: "82%", height: "5.4cqh" }}
+      role="progressbar"
+      aria-label="Processing payment progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(progress)}
+    >
+      <div
+        className="h-full rounded-[1px]"
+        style={{ width: `${progress}%`, backgroundColor: RED, boxShadow: `0 0 8px ${RED}` }}
+      />
+    </div>
+  )
+}
+
+function LoginFields({ onLogin }: { onLogin: (user: string, pass: string) => void }) {
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (username.trim() === VALID_USER && password === VALID_PASS) {
+      setError("")
+      onLogin(username.trim(), password)
+    } else {
+      setError("ACCESS DENIED")
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="flex w-[50%] flex-col mx-auto gap-[1.8cqh] mt-[4cqh]"
+      style={{ position: "relative" }}
+    >
+      {/* Invisible default submit button: Chromium only does implicit
+          Enter-submission when a submit button exists. Kept 1x1, opacity 0,
+          untabbable, unclickable — purely a submit trigger. */}
+      <button
+        type="submit"
+        aria-hidden="true"
+        tabIndex={-1}
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          opacity: 0,
+          overflow: "hidden",
+          border: 0,
+          padding: 0,
+          margin: -1,
+          pointerEvents: "none",
+        }}
+      >
+        submit
+      </button>
+      {/* Username */}
+      <LoginField
+        label="USERNAME:"
+        value={username}
+        onChange={setUsername}
+        type="text"
+        placeholder="enter username"
+      />
+      {/* Password */}
+      <LoginField
+        label="PASSWORD:"
+        value={password}
+        onChange={setPassword}
+        type="password"
+        placeholder="enter password"
+      />
+      {/* Error message */}
+      {error && (
+        <p
+          className="w-full text-center font-[family-name:var(--font-dot-gothic)] leading-none"
+          style={{ color: RED, fontSize: "3cqw", textShadow: `0 0 8px ${RED}`, marginTop: "-0.5cqh" }}
+        >
+          {error}
+        </p>
+      )}
+
+    </form>
+  )
+}
+
+function LoginField({
+  label,
+  value,
+  onChange,
+  type,
+  placeholder,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  type: string
+  placeholder: string
+}) {
+  return (
+    <div
+      className="flex items-center gap-[0.9cqw] rounded-[2px] border-2 px-[1.2cqw] py-[0.75cqh] font-[family-name:var(--font-dot-gothic)]"
+      style={{ borderColor: RED, boxShadow: `0 0 5px ${RED}44` }}
+    >
+      <span
+        className="whitespace-nowrap leading-none"
+        style={{ color: RED, fontSize: "3cqw", textShadow: `0 0 6px ${RED}55` }}
+      >
+        {label}
+      </span>
+      {/* Actual input field */}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="flex-1 bg-transparent outline-none border-none text-red-[#e8232a] font-[family-name:var(--font-dot-gothic)] placeholder:text-red-[#e8232a66]"
+        style={{
+          fontSize: "3cqw",
+          caretColor: RED,
+          color: RED,
+        }}
+        placeholder={placeholder}
+        autoFocus
+        autoComplete="off"
+      />
+    </div>
+  )
+}
+
+function GrantedScreen({ onComplete }: { onComplete: () => void }) {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    // Fade in on mount
+    setVisible(true)
+  }, [])
+
+  useEffect(() => {
+    if (!visible) return
+    // Show for 1.5s then advance to HUD
+    const timer = setTimeout(onComplete, 1500)
+    return () => clearTimeout(timer)
+  }, [visible, onComplete])
+
+  return (
+    <div
+      className="flex w-[50%] flex-col mx-auto gap-[1.8cqh] mt-[4cqh]"
+      style={{
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.3s ease",
+      }}
+    >
+      <p
+        className="font-[family-name:var(--font-archivo-black)] tracking-[0.1em] text-center"
+        style={{
+          color: CREAM,
+          fontSize: "2cqw",
+          textShadow: `0 0 8px ${CREAM}66`,
+          letterSpacing: "0.1em",
+        }}
+      >
+        ACCESS GRANTED
+      </p>
+    </div>
+  )
+}
+
+function InsertCoinBox() {
+  return (
+    <div
+      className="absolute left-[6.5%] top-[6%] z-20 flex w-fit flex-col gap-[0.7cqh] rounded-[4px] border-2 px-[1.9cqw] py-[1.5cqh] font-[family-name:var(--font-vt323)] leading-[0.9]"
+      style={{ borderColor: RED, color: RED, boxShadow: `0 0 5px ${RED}44` }}
+    >
+      <span className="whitespace-nowrap" style={{ fontSize: "4cqw", letterSpacing: "0.02em" }}>
+        INSERT
+        <br />
+        COIN
+      </span>
+      <div
+        className="my-[0.3cqh] w-full rounded-[1px]"
+        style={{ backgroundColor: RED, boxShadow: `0 0 6px ${RED}`, height: "1.7cqh" }}
+      />
+      <span className="whitespace-nowrap" style={{ fontSize: "4.2cqw", letterSpacing: "0.02em" }}>
+        0.001
+        <br />
+        BTC
+      </span>
+    </div>
+  )
+}
+
+function WkLogo() {
+  return (
+    <div
+      className="absolute bottom-[6%] right-[6.5%] z-20 flex items-center justify-center rounded-[3px] font-[family-name:var(--font-archivo-black)]"
+      style={{ backgroundColor: RED, width: "6.2cqw", height: "6.2cqw" }}
+      aria-label="WK logo"
+    >
+      <span className="text-black" style={{ fontSize: "2.8cqw", letterSpacing: "-0.02em" }}>
+        wk
+      </span>
+    </div>
+  )
+}
