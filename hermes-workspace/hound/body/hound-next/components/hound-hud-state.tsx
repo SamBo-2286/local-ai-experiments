@@ -44,6 +44,8 @@ interface HUDState {
   stats: StatsData | null
   statsOnline: boolean
   statsFailCount: number
+  idleMs: number
+  isLocked: boolean
 }
 
 const HUD: HUDState = {
@@ -61,6 +63,8 @@ const HUD: HUDState = {
   stats: null,
   statsOnline: false,
   statsFailCount: 0,
+  idleMs: 0,
+  isLocked: false,
 }
 
 export function useHudState() {
@@ -203,6 +207,22 @@ export function useHudState() {
     [appendMessage, setAvatarState],
   )
 
+  const setIdleMs = useCallback(
+    (ms: number) => {
+      ref.current.idleMs = ms
+      force()
+    },
+    [force],
+  )
+
+  const setIsLocked = useCallback(
+    (locked: boolean) => {
+      ref.current.isLocked = locked
+      force()
+    },
+    [force],
+  )
+
   const s = ref.current
 
   return {
@@ -217,6 +237,8 @@ export function useHudState() {
     log: s.log,
     stats: s.stats,
     statsOnline: s.statsOnline,
+    idleMs: s.idleMs,
+    isLocked: s.isLocked,
     setAvatarState,
     setWaveState,
     setDisplayMode,
@@ -233,5 +255,7 @@ export function useHudState() {
     sendHoundMessage,
     setThinking,
     setOutput,
+    setIdleMs,
+    setIsLocked,
   }
 }

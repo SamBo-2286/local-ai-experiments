@@ -16,6 +16,8 @@ import { useEffect, useRef, useLayoutEffect, useState } from "react"
 import { useHudState } from "./hound-hud-state"
 import { HoundAvatar } from "./hound-avatar"
 import { VaultGraph } from "./vault-graph"
+import { ScreensaverOverlay } from "./screensaver-overlay"
+import { LockScreen } from "./lock-screen"
 
 const RED = "#e8232a"
 const CREAM = "#f2ecc0"
@@ -26,6 +28,21 @@ export function HudFullBleed() {
   const s = useHudState()
   const frameRef = useRef(1)
   const [frame, setFrame] = useState(1)
+  const [isLocked, setIsLockedState] = useState(false)
+
+  // Handle lock
+  const handleLock = () => {
+    if (!isLocked) {
+      setIsLockedState(true)
+      s.setIsLocked(true)
+    }
+  }
+
+  // Handle unlock
+  const handleUnlock = () => {
+    setIsLockedState(false)
+    s.setIsLocked(false)
+  }
 
   // Frame counter: increments during thinking/speaking, resets to 1
   useEffect(() => {
@@ -123,6 +140,34 @@ export function HudFullBleed() {
             </span>
           </footer>
         </div>
+
+        {/* Idle indicator (top-right corner, only when unlocked) */}
+        {!isLocked && s.idleMs > 0 && (
+          <div
+            className="absolute z-20"
+            style={{
+              right: "1.5cqw",
+              top: "1.5cqw",
+              fontSize: "clamp(6px, 0.55cqw, 9px)",
+              color: "rgba(216,75,75,0.35)",
+              fontFamily: "var(--font-vt323)",
+              letterSpacing: "0.1em",
+            }}
+          >
+            IDLE: {Math.floor(s.idleMs / 60000)}m{s.idleMs % 60000 >= 1000 ? `${Math.floor((s.idleMs % 60000) / 1000)}s` : ""}
+          </div>
+        )}
+
+        {/* Lock screen overlay */}
+        <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} />
+
+        {/* Screensaver idle tracking (only when unlocked) */}
+        {!isLocked && (
+          <ScreensaverOverlay
+            onLock={handleLock}
+            onUnlock={handleUnlock}
+          />
+        )}
       </div>
     </div>
   )
