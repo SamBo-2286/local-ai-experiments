@@ -58,6 +58,43 @@ export function HudFullBleed() {
     return () => clearInterval(id)
   }, [s.avatarState])
 
+  // WebSocket connection to voice bridge for wake word and speech events
+  useEffect(() => {
+    const wsUrl = `ws://${window.location.host}:8092`
+    const ws = new WebSocket(wsUrl)
+    const bridgeRef = ws
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "registerHud" }))
+      s.appendMessage("system", "VOICE BRIDGE CONNECTED")
+    }
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg.type === "wakeWord") {
+          s.appendMessage("system", `WAKE WORD DETECTED (confidence: ${(msg.confidence * 100).toFixed(0)}%)`)
+        } else if (msg.type === "speechActive") {
+          s.setWaveState(msg.active ? "speaking" : "idle")
+        } else if (msg.type === "avatar") {
+          s.setAvatarState(msg.state)
+        } else if (msg.type === "chat_reply") {
+          s.appendMessage("model", msg.data)
+        }
+      } catch (e) {
+        console.error("Bridge message parse error:", e)
+      }
+    }
+
+    ws.onerror = () => {
+      s.appendMessage("system", "VOICE BRIDGE DISCONNECTED")
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [s])
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center bg-black"
