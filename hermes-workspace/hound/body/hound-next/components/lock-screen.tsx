@@ -1,8 +1,9 @@
+"use client"
+
 /**
  * HOUND Lock Screen — Password overlay after 120s idle
  * Dismissed by: password entry + Enter, or face match via WebSocket
  */
-"use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
 
@@ -38,26 +39,14 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
     }
   }, [isLocked])
 
-  // WebSocket to wake-word-detector on port 8092
-  // Receives: {"type":"wakeWord","confidence":0.95} or {"type":"faceMatch","match":true}
+  // Face match / unlock events via shared WebSocket — handled by HudFullBleed
+  // This component only listens for unlock signals, never opens its own connection.
   useEffect(() => {
     if (!isLocked) return
 
-    const ws = new WebSocket(`ws://${window.location.hostname}:8092`)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      // Send lock confirmation so detector knows HUD is ready
-      ws.send(JSON.stringify({ type: "hudReady" }))
-    }
-
-    ws.onmessage = (evt) => {
+    const handler = (evt: MessageEvent) => {
       try {
         const msg = JSON.parse(evt.data)
-        if (msg.type === "wakeWord" && msg.confidence > 0.7) {
-          // Auto-unlock if wake word + face match comes through
-          // For now, just show a hint that the mic is listening
-        }
         if (msg.type === "faceMatch" && msg.match === true) {
           onUnlocked()
         }
@@ -69,12 +58,10 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
       }
     }
 
-    ws.onerror = () => {
-      // WebSocket error — fall back to password
-    }
+    window.addEventListener("hound-unlock-event", handler as EventListener)
 
     return () => {
-      ws.close()
+      window.removeEventListener("hound-unlock-event", handler as EventListener)
     }
   }, [isLocked, onUnlocked])
 

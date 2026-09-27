@@ -1,3 +1,5 @@
+"use client"
+
 /**
  * Vault Graph — 2D canvas-based node-link diagram.
  * Force-directed layout: repulsion + link springs + center gravity.
@@ -6,7 +8,6 @@
  * Positions are cached across fetches by node id, so the 60s re-fetch
  * doesn't re-randomize the layout — new nodes drift in, old nodes stay put.
  */
-"use client"
 
 import { useEffect, useRef, useState } from "react"
 

@@ -1,3 +1,5 @@
+"use client"
+
 /**
  * HOUND HUD Shared State Module
  * Mirrors the layout HTML's window.HOUND API for future drop-in comms phase.
@@ -7,9 +9,8 @@
  *   displayWeb, displayText, displayImage, displayVault
  *   sendMessage, appendMessage, clearLog, toggleCamera, toggleMic
  */
-"use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect } from "react"
 
 export interface StatsData {
   cpu: number
@@ -39,6 +40,7 @@ interface HUDState {
   displayPayload: string | null
   cameraOn: boolean
   micOn: boolean
+  micActive: boolean
   voiceState: VoiceState
   log: Array<{ type: string; text: string }>
   stats: StatsData | null
@@ -46,6 +48,9 @@ interface HUDState {
   statsFailCount: number
   idleMs: number
   isLocked: boolean
+  bridgeWs: WebSocket | null
+  mediaRecorder: MediaRecorder | null
+  mediaStream: MediaStream | null
 }
 
 const HUD: HUDState = {
@@ -55,6 +60,7 @@ const HUD: HUDState = {
   displayPayload: null,
   cameraOn: true,
   micOn: false,
+  micActive: false,
   voiceState: "idle",
   log: [
     { type: "system", text: "HOUND // MAIN HUD ONLINE" },
@@ -65,9 +71,48 @@ const HUD: HUDState = {
   statsFailCount: 0,
   idleMs: 0,
   isLocked: false,
+  bridgeWs: null,
+  mediaRecorder: null,
+  mediaStream: null,
 }
 
-export function useHudState() {
+export interface HudApi {
+  tick: number
+  avatarState: string
+  waveState: string
+  displayMode: DisplayMode
+  displayPayload: string | null
+  cameraOn: boolean
+  micOn: boolean
+  micActive: boolean
+  voiceState: VoiceState
+  log: Array<{ type: string; text: string }>
+  stats: StatsData | null
+  statsOnline: boolean
+  idleMs: number
+  isLocked: boolean
+  setAvatarState: (s: string) => void
+  setWaveState: (s: string) => void
+  setDisplayMode: (m: DisplayMode) => void
+  displayWeb: (url: string) => void
+  displayText: (text: string) => void
+  displayImage: (url: string) => void
+  displayVault: () => void
+  setStats: (s: StatsData | null) => void
+  setStatsOffline: () => void
+  appendMessage: (type: string, text: string) => void
+  clearLog: () => void
+  toggleCamera: () => void
+  toggleMic: () => void
+  sendHoundMessage: (text: string) => void
+  setThinking: (text: string) => void
+  setOutput: (text: string) => void
+  setIdleMs: (ms: number) => void
+  setIsLocked: (locked: boolean) => void
+  setBridgeWs: (ws: WebSocket | null) => void
+}
+
+export function useHudState(): HudApi {
   const ref = useRef(HUD)
 
   const [tick, setTick] = useState(0)
@@ -168,10 +213,75 @@ export function useHudState() {
     force()
   }, [force])
 
-  const toggleMic = useCallback(() => {
-    ref.current.micOn = !ref.current.micOn
+  const setBridgeWs = useCallback((ws: WebSocket | null) => {
+    ref.current.bridgeWs = ws
     force()
   }, [force])
+
+  const toggleMic = useCallback(() => {
+    if (ref.current.micOn) {
+      // Stop mic
+      if (ref.current.mediaRecorder) {
+        ref.current.mediaRecorder.stop()
+        ref.current.mediaRecorder = null
+      }
+      if (ref.current.mediaStream) {
+        ref.current.mediaStream.getTracks().forEach((t) => t.stop())
+        ref.current.mediaStream = null
+      }
+      ref.current.micOn = false
+      ref.current.micActive = false
+      force()
+    } else {
+      // Start mic — capture audio and stream it to the bridge
+      if (!ref.current.bridgeWs) {
+        appendMessage("system", "VOICE BRIDGE NOT CONNECTED")
+        return
+      }
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        ref.current.mediaStream = stream
+        ref.current.micOn = true
+        ref.current.micActive = true
+        force()
+
+        const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" })
+        ref.current.mediaRecorder = recorder
+        const chunks: Blob[] = []
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && ref.current.micActive) {
+            chunks.push(e.data)
+          }
+        }
+
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: "audio/webm" })
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const arrayBuffer = reader.result as ArrayBuffer
+            const hex = Array.from(new Uint8Array(arrayBuffer))
+              .map((b) => b.toString(16).padStart(2, "0"))
+              .join("")
+            if (
+              hex.length > 0 &&
+              ref.current.bridgeWs?.readyState === WebSocket.OPEN
+            ) {
+              ref.current.bridgeWs.send(
+                JSON.stringify({ type: "mic", data: hex }),
+              )
+            }
+            chunks.length = 0
+          }
+          reader.readAsArrayBuffer(blob)
+        }
+
+        recorder.start(1000) // 1s chunks
+      }).catch((err) => {
+        console.error("Mic error:", err)
+        appendMessage("system", "MIC ERROR: " + err.message)
+      })
+    }
+  }, [force, appendMessage])
 
   const sendHoundMessage = useCallback(
     (text: string) => {
@@ -179,14 +289,20 @@ export function useHudState() {
       if (!trimmed) return
       appendMessage("user", trimmed)
       setAvatarState("thinking")
-      // Comms deferred — fallback only
-      setTimeout(() => {
-        appendMessage(
-          "system",
-          "LOCAL MODEL BRIDGE NOT CONNECTED // MESSAGE QUEUED FOR HOUND",
-        )
-        setAvatarState("idle")
-      }, 300)
+
+      // Actually send to the bridge if connected
+      if (ref.current.bridgeWs && ref.current.bridgeWs.readyState === WebSocket.OPEN) {
+        ref.current.bridgeWs.send(JSON.stringify({ type: "chat", data: trimmed }))
+      } else {
+        // Bridge not connected yet — show fallback
+        setTimeout(() => {
+          appendMessage(
+            "system",
+            "LOCAL MODEL BRIDGE NOT CONNECTED // MESSAGE QUEUED FOR HOUND",
+          )
+          setAvatarState("idle")
+        }, 300)
+      }
     },
     [appendMessage, setAvatarState],
   )
@@ -223,39 +339,90 @@ export function useHudState() {
     [force],
   )
 
-  const s = ref.current
+  // Clean up media on unmount
+  useEffect(() => {
+    return () => {
+      if (ref.current.mediaRecorder) {
+        ref.current.mediaRecorder.stop()
+        ref.current.mediaRecorder = null
+      }
+      if (ref.current.mediaStream) {
+        ref.current.mediaStream.getTracks().forEach((t) => t.stop())
+        ref.current.mediaStream = null
+      }
+    }
+  }, [])
 
-  return {
-    tick,
-    avatarState: s.avatarState,
-    waveState: s.waveState,
-    displayMode: s.displayMode,
-    displayPayload: s.displayPayload,
-    cameraOn: s.cameraOn,
-    micOn: s.micOn,
-    voiceState: s.voiceState,
-    log: s.log,
-    stats: s.stats,
-    statsOnline: s.statsOnline,
-    idleMs: s.idleMs,
-    isLocked: s.isLocked,
-    setAvatarState,
-    setWaveState,
-    setDisplayMode,
-    displayWeb,
-    displayText,
-    displayImage,
-    displayVault,
-    setStats,
-    setStatsOffline,
-    appendMessage,
-    clearLog,
-    toggleCamera,
-    toggleMic,
-    sendHoundMessage,
-    setThinking,
-    setOutput,
-    setIdleMs,
-    setIsLocked,
+  // STABLE REFERENCE FIX (2026-09-26):
+  // Previously this returned a fresh object literal on every render. Any
+  // consumer using `[s]` as a useEffect dependency (the voice-bridge WS
+  // effect, the idle-timer effect, the stats poll) saw a new reference each
+  // render, tore down and re-created the effect, called force(), and caused
+  // another render — an infinite loop that flapped the WebSocket 1-2x/sec
+  // and flooded the chat log with DISCONNECTED messages.
+  //
+  // We now build the API object ONCE and cache it in a ref. All state
+  // fields are read from the shared store at render time (spread evaluates
+  // them fresh each render, so consumers always see current values), while
+  // every function reference stays identical across renders. Effects keyed
+  // on [s] now run exactly once on mount and clean up once on unmount.
+  const apiRef = useRef<HudApi | null>(null)
+  if (apiRef.current === null) {
+    apiRef.current = {
+      tick,
+      avatarState: ref.current.avatarState,
+      waveState: ref.current.waveState,
+      displayMode: ref.current.displayMode,
+      displayPayload: ref.current.displayPayload,
+      cameraOn: ref.current.cameraOn,
+      micOn: ref.current.micOn,
+      micActive: ref.current.micActive,
+      voiceState: ref.current.voiceState,
+      log: ref.current.log,
+      stats: ref.current.stats,
+      statsOnline: ref.current.statsOnline,
+      idleMs: ref.current.idleMs,
+      isLocked: ref.current.isLocked,
+      setAvatarState,
+      setWaveState,
+      setDisplayMode,
+      displayWeb,
+      displayText,
+      displayImage,
+      displayVault,
+      setStats,
+      setStatsOffline,
+      appendMessage,
+      clearLog,
+      toggleCamera,
+      toggleMic,
+      sendHoundMessage,
+      setThinking,
+      setOutput,
+      setIdleMs,
+      setIsLocked,
+      setBridgeWs,
+    }
   }
+
+  // Re-read live values into the SAME object identity each render so that
+  // consumers (which hold the first render's reference) always see fresh
+  // state, while the reference itself never changes for effect deps.
+  const api = apiRef.current
+  api.tick = tick
+  api.avatarState = ref.current.avatarState
+  api.waveState = ref.current.waveState
+  api.displayMode = ref.current.displayMode
+  api.displayPayload = ref.current.displayPayload
+  api.cameraOn = ref.current.cameraOn
+  api.micOn = ref.current.micOn
+  api.micActive = ref.current.micActive
+  api.voiceState = ref.current.voiceState
+  api.log = ref.current.log
+  api.stats = ref.current.stats
+  api.statsOnline = ref.current.statsOnline
+  api.idleMs = ref.current.idleMs
+  api.isLocked = ref.current.isLocked
+
+  return api
 }

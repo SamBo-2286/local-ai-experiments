@@ -1,8 +1,9 @@
+"use client"
+
 /**
  * HOUND AI Avatar — text-face engine with 18 states, blink, frame counter.
  * Ported from hound-text-avatar-engine.html
  */
-"use client"
 
 import { useState, useEffect, useRef } from "react"
 

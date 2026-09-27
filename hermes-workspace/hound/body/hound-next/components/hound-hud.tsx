@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * HOUND HUD — Main full-bleed layout
  * 3×3 grid + footer, full-bleed viewport with cqw/cqh units.
@@ -12,12 +14,13 @@
  * entire screen correctly.
  */
 
-import { useEffect, useRef, useLayoutEffect, useState } from "react"
+import { useEffect, useRef, useLayoutEffect, useState, useCallback } from "react"
 import { useHudState } from "./hound-hud-state"
 import { HoundAvatar } from "./hound-avatar"
 import { VaultGraph } from "./vault-graph"
-import { ScreensaverOverlay } from "./screensaver-overlay"
 import { LockScreen } from "./lock-screen"
+
+const IDLE_TIMEOUT_MS = 120_000 // 120 seconds
 
 const RED = "#e8232a"
 const CREAM = "#f2ecc0"
@@ -44,6 +47,37 @@ export function HudFullBleed() {
     s.setIsLocked(false)
   }
 
+  // Idle timeout tracking — moved here so it always runs (not gated by lock state)
+  const lastActivityRef = useRef(Date.now())
+  const resetIdle = useCallback(() => {
+    lastActivityRef.current = Date.now()
+    s.setIdleMs(0)
+  }, [s])
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resetIdle)
+    window.addEventListener("keydown", resetIdle)
+    window.addEventListener("click", resetIdle)
+    window.addEventListener("touchstart", resetIdle)
+
+    const interval = setInterval(() => {
+      const idle = Date.now() - lastActivityRef.current
+      s.setIdleMs(idle)
+
+      if (idle >= IDLE_TIMEOUT_MS) {
+        handleLock()
+      }
+    }, 1000)
+
+    return () => {
+      window.removeEventListener("mousemove", resetIdle)
+      window.removeEventListener("keydown", resetIdle)
+      window.removeEventListener("click", resetIdle)
+      window.removeEventListener("touchstart", resetIdle)
+      clearInterval(interval)
+    }
+  }, [resetIdle, s])
+
   // Frame counter: increments during thinking/speaking, resets to 1
   useEffect(() => {
     const id = setInterval(() => {
@@ -59,10 +93,13 @@ export function HudFullBleed() {
   }, [s.avatarState])
 
   // WebSocket connection to voice bridge for wake word and speech events
+  const bridgeRef = useRef<WebSocket | null>(null)
+
   useEffect(() => {
-    const wsUrl = `ws://${window.location.host}:8092`
+    const wsUrl = `ws://${window.location.hostname}:8092`
     const ws = new WebSocket(wsUrl)
-    const bridgeRef = ws
+    bridgeRef.current = ws
+    s.setBridgeWs(ws)
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "registerHud" }))
@@ -80,6 +117,33 @@ export function HudFullBleed() {
           s.setAvatarState(msg.state)
         } else if (msg.type === "chat_reply") {
           s.appendMessage("model", msg.data)
+        } else if (msg.type === "tts_audio") {
+          // Bridge synthesized a voice reply: base64 WAV -> blob -> play.
+          try {
+            s.setAvatarState("talking")
+            const bytes = atob(msg.data ?? msg.audio)
+            const arr = new Uint8Array(bytes.length)
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i)
+            const url = URL.createObjectURL(new Blob([arr], { type: "audio/wav" }))
+            const audio = new Audio(url)
+            audio.onended = () => {
+              s.setAvatarState("idle")
+              URL.revokeObjectURL(url)
+            }
+            audio.onerror = () => {
+              s.appendMessage("system", "TTS PLAYBACK FAILED (audio blocked?)")
+              s.setAvatarState("idle")
+              URL.revokeObjectURL(url)
+            }
+            void audio.play()
+          } catch (e) {
+            s.appendMessage("system", "TTS PLAYBACK ERROR")
+            s.setAvatarState("idle")
+          }
+        } else if (msg.type === "faceMatch") {
+          window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
+        } else if (msg.type === "unlocked") {
+          window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
         }
       } catch (e) {
         console.error("Bridge message parse error:", e)
@@ -198,13 +262,7 @@ export function HudFullBleed() {
         {/* Lock screen overlay */}
         <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} />
 
-        {/* Screensaver idle tracking (only when unlocked) */}
-        {!isLocked && (
-          <ScreensaverOverlay
-            onLock={handleLock}
-            onUnlock={handleUnlock}
-          />
-        )}
+        {/* Screensaver idle tracking removed — idle logic now in HudFullBleed (always runs) */}
       </div>
     </div>
   )

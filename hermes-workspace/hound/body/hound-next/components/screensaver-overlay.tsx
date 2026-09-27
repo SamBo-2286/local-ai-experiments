@@ -1,10 +1,10 @@
+"use client"
 /**
  * HOUND Screensaver Overlay — Idle timer (120s)
  * Tracks mouse movement, key presses, and audio activity to determine idle time.
  * Triggers the lock screen when idle for 120 seconds.
  * Updates idleMs in shared HUD state.
  */
-"use client"
 
 import { useEffect, useRef, useCallback } from "react"
 import { useHudState } from "./hound-hud-state"
