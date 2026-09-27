@@ -119,8 +119,9 @@ export function HudFullBleed() {
           s.appendMessage("model", msg.data)
         } else if (msg.type === "tts_audio") {
           // Bridge synthesized a voice reply: base64 WAV -> blob -> play.
+          // Avatar state "speaking" is the engine's talking animation.
           try {
-            s.setAvatarState("talking")
+            s.setAvatarState("speaking")
             const bytes = atob(msg.data ?? msg.audio)
             const arr = new Uint8Array(bytes.length)
             for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i)
