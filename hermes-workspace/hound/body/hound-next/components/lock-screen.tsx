@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from "react"
+import { useDetector } from "../lib/detector-client"
 
 const IDLE_TIMEOUT_MS = 120_000 // 120 seconds
 
@@ -18,8 +19,23 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
   const [password, setPassword] = useState("")
   const [time, setTime] = useState("")
   const [error, setError] = useState("")
+  const [detectionLabel, setDetectionLabel] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+
+  // Detection polling — runs ONLY while locked
+  const { detection, isPolling } = useDetector(isLocked, () => {
+    // Face match detected — trigger unlock
+    window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: { type: "faceMatch", match: true } }))
+  })
+
+  // Update detection label for display
+  useEffect(() => {
+    if (detection.status === "face_found" || detection.status === "pet_found" || detection.status === "unknown_face") {
+      setDetectionLabel(detection.label || detection.status)
+    } else {
+      setDetectionLabel(null)
+    }
+  }, [detection])
 
   // Clock — update every second
   useEffect(() => {
@@ -39,22 +55,15 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
     }
   }, [isLocked])
 
-  // Face match / unlock events via shared WebSocket — handled by HudFullBleed
-  // This component only listens for unlock signals, never opens its own connection.
+  // Face match / unlock events — dispatched as CustomEvents by HudFullBleed
+  // (which owns the bridge WS). This component only listens, never connects.
   useEffect(() => {
     if (!isLocked) return
 
-    const handler = (evt: MessageEvent) => {
-      try {
-        const msg = JSON.parse(evt.data)
-        if (msg.type === "faceMatch" && msg.match === true) {
-          onUnlocked()
-        }
-        if (msg.type === "unlocked") {
-          onUnlocked()
-        }
-      } catch {
-        // Ignore parse errors
+    const handler = (evt: Event) => {
+      const detail = (evt as CustomEvent).detail as { type?: string } | undefined
+      if (detail && (detail.type === "faceMatch" || detail.type === "unlocked")) {
+        onUnlocked()
       }
     }
 
@@ -96,6 +105,29 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
       className="fixed inset-0 z-50 flex flex-col items-center justify-center"
       style={{ background: "rgba(0,2,3,0.97)" }}
     >
+      {/* Detection status indicator (top-right corner) */}
+      {isPolling && (
+        <div
+          className="absolute top-4 right-4 flex items-center gap-2"
+          style={{
+            fontSize: "clamp(8px, 0.7cqw, 11px)",
+            color: detectionLabel ? "#4ade4a" : "rgba(216,75,75,0.5)",
+            fontFamily: "var(--font-vt323)",
+          }}
+        >
+          <span style={{
+            display: "inline-block",
+            width: "6px",
+            height: "6px",
+            borderRadius: "50%",
+            backgroundColor: detectionLabel ? "#4ade4a" : "#e8232a",
+            boxShadow: detectionLabel ? "0 0 6px #4ade4a" : "0 0 4px #e8232a",
+            animation: "pulse 1s ease-in-out infinite",
+          }} />
+          {detectionLabel || "SCANNING"}
+        </div>
+      )}
+
       {/* HOUND logo */}
       <div className="mb-8 text-center">
         <img
@@ -201,6 +233,14 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
         <br />
         IDLE 120s
       </div>
+
+      {/* Pulse animation for detection indicator */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1 }
+          50% { opacity: 0.4 }
+        }
+      `}</style>
     </div>
   )
 }

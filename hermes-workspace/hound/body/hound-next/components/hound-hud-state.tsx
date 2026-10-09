@@ -112,6 +112,12 @@ export interface HudApi {
   setBridgeWs: (ws: WebSocket | null) => void
 }
 
+// Live accessor for the shared bridge WebSocket (used by lib/detector-client
+// to send detectorCommand start/stop without creating new object identities).
+export function getBridgeWs(): WebSocket | null {
+  return HUD.bridgeWs
+}
+
 export function useHudState(): HudApi {
   const ref = useRef(HUD)
 

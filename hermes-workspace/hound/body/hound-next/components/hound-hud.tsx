@@ -21,6 +21,9 @@ import { VaultGraph } from "./vault-graph"
 import { LockScreen } from "./lock-screen"
 
 const IDLE_TIMEOUT_MS = 120_000 // 120 seconds
+const WS_RECONNECT_BASE = 1000  // ms
+const WS_RECONNECT_MAX = 30000  // ms
+const WS_RECONNECT_MAX_ATTEMPTS = 20
 
 const RED = "#e8232a"
 const CREAM = "#f2ecc0"
@@ -43,8 +46,15 @@ export function HudFullBleed() {
 
   // Handle unlock
   const handleUnlock = () => {
-    setIsLockedState(false)
-    s.setIsLocked(false)
+    if (isLocked) {
+      setIsLockedState(false)
+      s.setIsLocked(false)
+      // Reset the idle clock: the moment we lock, lastActivityRef is already
+      // >= 120s stale, so without this the next 1s tick re-locks instantly
+      // (unlock -> re-lock -> detector start/stop flap, every second).
+      lastActivityRef.current = Date.now()
+      s.setIdleMs(0)
+    }
   }
 
   // Idle timeout tracking — moved here so it always runs (not gated by lock state)
@@ -94,16 +104,28 @@ export function HudFullBleed() {
 
   // WebSocket connection to voice bridge for wake word and speech events
   const bridgeRef = useRef<WebSocket | null>(null)
+  const attemptRef = useRef(0)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  useEffect(() => {
+  const attemptReconnect = useCallback(() => {
     const wsUrl = `ws://${window.location.hostname}:8092`
     const ws = new WebSocket(wsUrl)
     bridgeRef.current = ws
     s.setBridgeWs(ws)
 
     ws.onopen = () => {
+      attemptRef.current = 0
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
       ws.send(JSON.stringify({ type: "registerHud" }))
       s.appendMessage("system", "VOICE BRIDGE CONNECTED")
+    }
+
+    ws.onclose = () => {
+      s.appendMessage("system", "VOICE BRIDGE DISCONNECTED")
+      scheduleReconnect()
     }
 
     ws.onmessage = (evt) => {
@@ -141,6 +163,16 @@ export function HudFullBleed() {
             s.appendMessage("system", "TTS PLAYBACK ERROR")
             s.setAvatarState("idle")
           }
+        } else if (msg.type === "faceDetected") {
+          // Body detector found a face/pet — dispatch to lock screen hook
+          window.dispatchEvent(new CustomEvent("hound-detection-event", { detail: msg }))
+          // Also unlock if a face was matched. Lock screen requires
+          // detail.type === "faceMatch" — normalize the detail.
+          if (msg.match === true) {
+            window.dispatchEvent(new CustomEvent("hound-unlock-event", {
+              detail: { type: "faceMatch", match: true },
+            }))
+          }
         } else if (msg.type === "faceMatch") {
           window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
         } else if (msg.type === "unlocked") {
@@ -152,13 +184,41 @@ export function HudFullBleed() {
     }
 
     ws.onerror = () => {
-      s.appendMessage("system", "VOICE BRIDGE DISCONNECTED")
-    }
-
-    return () => {
-      ws.close()
+      // onerror fires before onclose; onclose handler fires next
+      // and will call scheduleReconnect
     }
   }, [s])
+
+  const scheduleReconnect = useCallback(() => {
+    if (attemptRef.current >= WS_RECONNECT_MAX_ATTEMPTS) {
+      console.log("[WS] Max reconnect attempts reached")
+      return
+    }
+    const delay = Math.min(
+      WS_RECONNECT_BASE * Math.pow(2, attemptRef.current),
+      WS_RECONNECT_MAX
+    )
+    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${attemptRef.current + 1})`)
+    attemptRef.current++
+    reconnectTimerRef.current = setTimeout(() => {
+      attemptReconnect()
+    }, delay)
+  }, [attemptReconnect])
+
+  useEffect(() => {
+    attemptReconnect()
+
+    return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+      if (bridgeRef.current) {
+        bridgeRef.current.onclose = null // prevent onclose -> scheduleReconnect on unmount
+        bridgeRef.current.close()
+      }
+    }
+  }, [s, attemptReconnect])
 
   return (
     <div
@@ -750,6 +810,18 @@ function HudChatPanel({ s }: { s: ReturnType<typeof useHudState> }) {
 /* ─── Camera (top-right, spans rows 1-2 via grid-area in the style tag) ─── */
 function HudCameraPanel({ s }: { s: ReturnType<typeof useHudState> }) {
   const [camDead, setCamDead] = useState(false)
+  // A long-lived MJPEG connection backlogs when the browser falls behind
+  // (CPU load), so the on-screen feed lags by minutes. A fresh connection
+  // starts at the live tail (measured 0.69s). Re-source every 30s to cap
+  // staleness (2026-10-01).
+  const [camSrc, setCamSrc] = useState("/api/cam")
+  useEffect(() => {
+    const id = setInterval(
+      () => setCamSrc("/api/cam?n=" + Date.now()),
+      30_000
+    )
+    return () => clearInterval(id)
+  }, [])
 
   // Track stream health: onError fires when the MJPEG stream dies.
   useEffect(() => {
@@ -772,7 +844,7 @@ function HudCameraPanel({ s }: { s: ReturnType<typeof useHudState> }) {
 
       {s.cameraOn && (
         <img
-          src="/api/cam"
+          src={camSrc}
           alt="Camera feed"
           className="absolute inset-[3px] w-[calc(100%-6px)] h-[calc(100%-6px)] object-cover"
           style={{
