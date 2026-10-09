@@ -48,6 +48,8 @@ interface HUDState {
   statsFailCount: number
   idleMs: number
   isLocked: boolean
+  faceScan: boolean
+  faceScanTimer: ReturnType<typeof setTimeout> | null
   bridgeWs: WebSocket | null
   mediaRecorder: MediaRecorder | null
   mediaStream: MediaStream | null
@@ -71,6 +73,8 @@ const HUD: HUDState = {
   statsFailCount: 0,
   idleMs: 0,
   isLocked: false,
+  faceScan: false,
+  faceScanTimer: null,
   bridgeWs: null,
   mediaRecorder: null,
   mediaStream: null,
@@ -91,6 +95,7 @@ export interface HudApi {
   statsOnline: boolean
   idleMs: number
   isLocked: boolean
+  faceScan: boolean
   setAvatarState: (s: string) => void
   setWaveState: (s: string) => void
   setDisplayMode: (m: DisplayMode) => void
@@ -110,6 +115,8 @@ export interface HudApi {
   setOutput: (text: string) => void
   setIdleMs: (ms: number) => void
   setIsLocked: (locked: boolean) => void
+  setFaceScan: (active: boolean) => void
+  startFaceScanTimer: (onTimeout: () => void) => void
   setBridgeWs: (ws: WebSocket | null) => void
 }
 
@@ -358,9 +365,40 @@ export function useHudState(): HudApi {
     [force],
   )
 
-  // Clean up media on unmount
+  const setFaceScan = useCallback(
+    (active: boolean) => {
+      ref.current.faceScan = active
+      if (!active && ref.current.faceScanTimer) {
+        clearTimeout(ref.current.faceScanTimer)
+        ref.current.faceScanTimer = null
+      }
+      force()
+    },
+    [force],
+  )
+
+  const startFaceScanTimer = useCallback(
+    (onTimeout: () => void) => {
+      if (ref.current.faceScanTimer) {
+        clearTimeout(ref.current.faceScanTimer)
+      }
+      ref.current.faceScanTimer = setTimeout(() => {
+        ref.current.faceScan = false
+        ref.current.faceScanTimer = null
+        force()
+        onTimeout()
+      }, 10_000)
+    },
+    [force],
+  )
+
+  // Clean up timers and media on unmount
   useEffect(() => {
     return () => {
+      if (ref.current.faceScanTimer) {
+        clearTimeout(ref.current.faceScanTimer)
+        ref.current.faceScanTimer = null
+      }
       if (ref.current.mediaRecorder) {
         ref.current.mediaRecorder.stop()
         ref.current.mediaRecorder = null
@@ -402,6 +440,7 @@ export function useHudState(): HudApi {
       statsOnline: ref.current.statsOnline,
       idleMs: ref.current.idleMs,
       isLocked: ref.current.isLocked,
+      faceScan: ref.current.faceScan,
       setAvatarState,
       setWaveState,
       setDisplayMode,
@@ -421,6 +460,8 @@ export function useHudState(): HudApi {
       setOutput,
       setIdleMs,
       setIsLocked,
+      setFaceScan,
+      startFaceScanTimer,
       setBridgeWs,
     }
   }
@@ -428,7 +469,7 @@ export function useHudState(): HudApi {
   // Re-read live values into the SAME object identity each render so that
   // consumers (which hold the first render's reference) always see fresh
   // state, while the reference itself never changes for effect deps.
-  const api = apiRef.current
+  const api = apiRef.current!
   api.tick = tick
   api.avatarState = ref.current.avatarState
   api.waveState = ref.current.waveState
@@ -443,6 +484,7 @@ export function useHudState(): HudApi {
   api.statsOnline = ref.current.statsOnline
   api.idleMs = ref.current.idleMs
   api.isLocked = ref.current.isLocked
+  api.faceScan = ref.current.faceScan
 
   return api
 }
