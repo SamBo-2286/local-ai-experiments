@@ -77,6 +77,7 @@ export function HudFullBleed() {
 
       if (idle >= IDLE_TIMEOUT_MS) {
         handleLock()
+        s.setCameraOn(false)
       }
     }, 1000)
 

@@ -98,6 +98,7 @@ export interface HudApi {
   displayText: (text: string) => void
   displayImage: (url: string) => void
   displayVault: () => void
+  setCameraOn: (on: boolean) => void
   setStats: (s: StatsData | null) => void
   setStatsOffline: () => void
   appendMessage: (type: string, text: string) => void
@@ -218,6 +219,18 @@ export function useHudState(): HudApi {
     ref.current.cameraOn = !ref.current.cameraOn
     force()
   }, [force])
+
+  const setCameraOn = useCallback(
+    (on: boolean) => {
+      ref.current.cameraOn = on
+      force()
+      // Signal body to stop/start MJPEG stream via bridge WS
+      if (ref.current.bridgeWs && ref.current.bridgeWs.readyState === WebSocket.OPEN) {
+        ref.current.bridgeWs.send(JSON.stringify({ type: "cameraCommand", command: on ? "start" : "stop" }))
+      }
+    },
+    [force],
+  )
 
   const setBridgeWs = useCallback((ws: WebSocket | null) => {
     ref.current.bridgeWs = ws
@@ -401,6 +414,7 @@ export function useHudState(): HudApi {
       appendMessage,
       clearLog,
       toggleCamera,
+      setCameraOn,
       toggleMic,
       sendHoundMessage,
       setThinking,
