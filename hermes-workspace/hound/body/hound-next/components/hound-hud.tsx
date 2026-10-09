@@ -50,6 +50,8 @@ export function HudFullBleed() {
     if (isLocked) {
       setIsLockedState(false)
       s.setIsLocked(false)
+      // Restart MJPEG stream on unlock
+      s.setCameraOn(true)
       // Reset the idle clock: the moment we lock, lastActivityRef is already
       // >= 120s stale, so without this the next 1s tick re-locks instantly
       // (unlock -> re-lock -> detector start/stop flap, every second).
@@ -181,6 +183,8 @@ export function HudFullBleed() {
           window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
         } else if (msg.type === "unlocked") {
           window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
+        } else if (msg.type === "cameraStatus") {
+          s.setCameraOn(msg.state === "active")
         }
       } catch (e) {
         console.error("Bridge message parse error:", e)
