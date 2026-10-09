@@ -35,6 +35,7 @@ export function HudFullBleed() {
   const frameRef = useRef(1)
   const [frame, setFrame] = useState(1)
   const [isLocked, setIsLockedState] = useState(false)
+  const [wsDisconnected, setWsDisconnected] = useState(false)
 
   // Handle lock
   const handleLock = () => {
@@ -115,6 +116,7 @@ export function HudFullBleed() {
 
     ws.onopen = () => {
       attemptRef.current = 0
+      setWsDisconnected(false)
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
@@ -125,6 +127,7 @@ export function HudFullBleed() {
 
     ws.onclose = () => {
       s.appendMessage("system", "VOICE BRIDGE DISCONNECTED")
+      setWsDisconnected(true)
       scheduleReconnect()
     }
 
@@ -203,7 +206,7 @@ export function HudFullBleed() {
     reconnectTimerRef.current = setTimeout(() => {
       attemptReconnect()
     }, delay)
-  }, [attemptReconnect])
+  }, [])
 
   useEffect(() => {
     attemptReconnect()
@@ -218,7 +221,7 @@ export function HudFullBleed() {
         bridgeRef.current.close()
       }
     }
-  }, [s, attemptReconnect])
+  }, [])
 
   return (
     <div
@@ -320,8 +323,15 @@ export function HudFullBleed() {
           </div>
         )}
 
-        {/* Lock screen overlay */}
-        <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} />
+        {/* Reconnecting indicator + Lock screen */}
+        <div className="relative">
+          {wsDisconnected && (
+            <div className="reconnecting-indicator">
+              <span>RECONNECTING... (attempt {attemptRef.current + 1})</span>
+            </div>
+          )}
+          <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} />
+        </div>
 
         {/* Screensaver idle tracking removed — idle logic now in HudFullBleed (always runs) */}
       </div>

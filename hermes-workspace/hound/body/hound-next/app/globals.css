@@ -220,3 +220,25 @@
     transform: scaleY(1);
   }
 }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.reconnecting-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(3, 8, 9, 0.9);
+  border: 1px solid rgba(255, 165, 0, 0.5);
+  color: #ffa500;
+  padding: 8px 16px;
+  border-radius: 2px;
+  font-family: var(--font-vt323);
+  font-size: 14px;
+  z-index: 40;
+  animation: pulse 2s infinite;
+  pointer-events: none;
+}
