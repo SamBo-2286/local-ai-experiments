@@ -1,25 +1,22 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Archivo_Black, DotGothic16, VT323 } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 
-const archivoBlack = Archivo_Black({
-  weight: '400',
-  subsets: ['latin'],
+const archivoBlack = localFont({
+  src: '../public/fonts/ArchivoBlack-Regular.ttf',
   variable: '--font-archivo-black',
   display: 'swap',
 })
 
-const dotGothic = DotGothic16({
-  weight: '400',
-  subsets: ['latin'],
+const dotGothic = localFont({
+  src: '../public/fonts/DotGothic16-Regular.ttf',
   variable: '--font-dot-gothic',
   display: 'swap',
 })
 
-const vt323 = VT323({
-  weight: '400',
-  subsets: ['latin'],
+const vt323 = localFont({
+  src: '../public/fonts/VT323-Regular.ttf',
   variable: '--font-vt323',
   display: 'swap',
 })
