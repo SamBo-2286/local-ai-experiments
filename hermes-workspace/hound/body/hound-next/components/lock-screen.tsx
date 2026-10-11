@@ -13,9 +13,10 @@ const IDLE_TIMEOUT_MS = 120_000 // 120 seconds
 interface Props {
   isLocked: boolean
   onUnlocked: () => void
+  faceScan?: boolean
 }
 
-export function LockScreen({ isLocked, onUnlocked }: Props) {
+export function LockScreen({ isLocked, onUnlocked, faceScan }: Props) {
   const [password, setPassword] = useState("")
   const [time, setTime] = useState("")
   const [error, setError] = useState("")
@@ -105,26 +106,26 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
       className="fixed inset-0 z-50 flex flex-col items-center justify-center"
       style={{ background: "rgba(0,2,3,0.97)" }}
     >
-      {/* Detection status indicator (top-right corner) */}
-      {isPolling && (
+      {/* Face scanning indicator (only during face scan window) */}
+      {faceScan && (
         <div
-          className="absolute top-4 right-4 flex items-center gap-2"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2"
           style={{
             fontSize: "clamp(8px, 0.7cqw, 11px)",
-            color: detectionLabel ? "#4ade4a" : "rgba(216,75,75,0.5)",
+            color: "#ffa500",
             fontFamily: "var(--font-vt323)",
+            zIndex: 51,
           }}
         >
-          <span style={{
-            display: "inline-block",
-            width: "6px",
-            height: "6px",
+          <div style={{
+            width: "24px",
+            height: "24px",
             borderRadius: "50%",
-            backgroundColor: detectionLabel ? "#4ade4a" : "#e8232a",
-            boxShadow: detectionLabel ? "0 0 6px #4ade4a" : "0 0 4px #e8232a",
-            animation: "pulse 1s ease-in-out infinite",
+            border: "2px solid #ffa500",
+            borderTopColor: "transparent",
+            animation: "spin 1s linear infinite",
           }} />
-          {detectionLabel || "SCANNING"}
+          <span>SCANNING...</span>
         </div>
       )}
 
@@ -239,6 +240,9 @@ export function LockScreen({ isLocked, onUnlocked }: Props) {
         @keyframes pulse {
           0%, 100% { opacity: 1 }
           50% { opacity: 0.4 }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>
