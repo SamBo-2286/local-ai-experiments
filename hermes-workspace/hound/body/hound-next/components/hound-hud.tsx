@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useRef, useLayoutEffect, useState, useCallback } from "react"
-import { useHudState } from "./hound-hud-state"
+import { useHudState, getBridgeWs } from "./hound-hud-state"
 import { HoundAvatar } from "./hound-avatar"
 import { VaultGraph } from "./vault-graph"
 import { LockScreen } from "./lock-screen"
@@ -138,7 +138,20 @@ export function HudFullBleed() {
       try {
         const msg = JSON.parse(evt.data)
         if (msg.type === "wakeWord") {
-          s.appendMessage("system", `WAKE WORD DETECTED (confidence: ${(msg.confidence * 100).toFixed(0)}%)`)
+          const conf = (msg.confidence as number) ?? 0
+          s.appendMessage("system", `WAKE WORD DETECTED (confidence: ${(conf * 100).toFixed(0)}%)`)
+          // Trigger face scan if HUD is locked and not already scanning
+          if (s.isLocked && !s.faceScan) {
+            s.setFaceScan(true)
+            // Trigger face verification via bridge
+            const bridge = getBridgeWs()
+            if (bridge && bridge.readyState === WebSocket.OPEN) {
+              bridge.send(JSON.stringify({ type: "faceVerifyCommand", command: "start" }))
+            }
+            s.startFaceScanTimer(() => {
+              s.appendMessage("system", "FACE SCAN TIMEOUT — LOCKED")
+            })
+          }
         } else if (msg.type === "speechActive") {
           s.setWaveState(msg.active ? "speaking" : "idle")
         } else if (msg.type === "avatar") {
@@ -180,7 +193,12 @@ export function HudFullBleed() {
             }))
           }
         } else if (msg.type === "faceMatch") {
-          window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
+          if (msg.match === true) {
+            window.dispatchEvent(new CustomEvent("hound-unlock-event", {
+              detail: { type: "faceMatch", match: true },
+            }))
+            s.setFaceScan(false)  // Clear scan state
+          }
         } else if (msg.type === "unlocked") {
           window.dispatchEvent(new CustomEvent("hound-unlock-event", { detail: msg }))
         } else if (msg.type === "cameraStatus") {
@@ -335,7 +353,7 @@ export function HudFullBleed() {
               <span>RECONNECTING... (attempt {attemptRef.current + 1})</span>
             </div>
           )}
-          <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} />
+          <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} faceScan={s.faceScan} />
         </div>
 
         {/* Screensaver idle tracking removed — idle logic now in HudFullBleed (always runs) */}
