@@ -27,14 +27,23 @@ saturates at load ~1.5. These rules come from a real incident — violating them
 4. **Bridge `tts_audio`** payload is base64 WAV in the `data` field (not `audio`).
 5. **Deploy gate — every brain→body deploy, no exceptions:**
    1. Backup: `git diff > backup.patch` + snapshot `components/` before editing.
-   2. Brain: `npx tsc --noEmit` (empty) + `rm -rf .next && pnpm build` (exit 0).
-   3. Body: `rm -rf .next` BEFORE `tar -xzf` (stale chunks lie), `scp` changed sources, verify BUILD_ID.
+   2. Brain: `npx tsc --noEmit` (empty) + `rm -rf .next && pnpm build` (exit 0). **Never exclude
+      `.next/` from the deploy — the body cannot rebuild (no pnpm, no node_modules).**
+   3. Body: `rm -rf .next node_modules components-backup` BEFORE `tar -xzf` (stale chunks lie).
+      Deploy the **full** brain output (source + `.next/` + `node_modules/` in one tar). Verify
+      BUILD_ID matches brain. `systemctl --user restart hound-next`.
    4. Wire-verify before any TV check: bridge journal stable (1 connection, not a storm), new code
-      present in served chunks, `curl -sI http://localhost:3000/` → 200. Slow model? Time one :8093
-      request, check `loadavg`, `pgrep -c ffmpeg` (want 1), `ss -tn | grep 8082` for CLOSE-WAIT.
+      present in served chunks (search `.next/static/chunks/` for feature strings),
+      `curl -sI http://localhost:3000/` → 200. Slow model? Time one :8093 request, check
+      `loadavg`, `pgrep -c ffmpeg` (want 1), `ss -tn | grep 8082` for CLOSE-WAIT.
    5. Sam verifies the golden path on the TV (login → speak → verbal reply + face animation →
       type → text+verbal → 120s idle → lock → unlock).
    6. Commit only after Sam confirms.
+
+   **Why full tar, not incremental sources:** The body has no pnpm and cannot install it
+   (corepack enable, npm i -g pnpm, all failed). The body is a serve-only node. Build on
+   brain → deploy complete `.next/` + `node_modules/` → serve on body. Incremental source
+   transfers break because `npm` can't resolve pnpm symlinks and there are no dependencies.
 6. **ssh to body:** user `ollie`; never write the password into files/commits/logs. Avoid
    parentheses in remote bash strings; `pkill -f` patterns must not match the ssh command line.
 7. One feature at a time: gate → Sam verifies → commit → next. Never batch features into one
