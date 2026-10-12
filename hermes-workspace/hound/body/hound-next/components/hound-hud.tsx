@@ -141,7 +141,7 @@ export function HudFullBleed() {
           const conf = (msg.confidence as number) ?? 0
           s.appendMessage("system", `WAKE WORD DETECTED (confidence: ${(conf * 100).toFixed(0)}%)`)
           // Trigger face scan if HUD is locked and not already scanning
-          if (s.isLocked && !s.faceScan) {
+          if (s.isLocked && !s.faceScan && s.faceUnlockEnabled) {
             s.setFaceScan(true)
             // Trigger face verification via bridge
             const bridge = getBridgeWs()
@@ -540,12 +540,7 @@ function HudControlPanel({ s }: { s: ReturnType<typeof useHudState> }) {
     { label: `CAMERA: ${s.cameraOn ? "ON" : "OFF"}`, action: s.toggleCamera, on: s.cameraOn },
     { label: `MIC: ${s.micOn ? "ON" : "OFF"}`, action: s.toggleMic, on: s.micOn },
     { label: "OBSIDIAN", action: s.displayVault, on: false },
-    {
-      label: "WEB VIEW",
-      action: () =>
-        s.displayText("WEB: URL ENTRY DEFERRED ON KIOSK"),
-      on: false,
-    },
+    { label: `FACE UNLOCK: ${s.faceUnlockEnabled ? "ON" : "OFF"}`, action: () => s.setFaceUnlockEnabled(!s.faceUnlockEnabled), on: s.faceUnlockEnabled },
     { label: "DISPLAY", action: s.displayVault, on: false },
     { label: "CLEAR LOG", action: s.clearLog, on: false },
     { label: "MODEL: general-subagent", action: () => {}, on: false },

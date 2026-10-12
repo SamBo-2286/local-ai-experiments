@@ -50,6 +50,7 @@ interface HUDState {
   isLocked: boolean
   faceScan: boolean
   faceScanTimer: ReturnType<typeof setTimeout> | null
+  faceUnlockEnabled: boolean
   bridgeWs: WebSocket | null
   mediaRecorder: MediaRecorder | null
   mediaStream: MediaStream | null
@@ -75,6 +76,7 @@ const HUD: HUDState = {
   isLocked: false,
   faceScan: false,
   faceScanTimer: null,
+  faceUnlockEnabled: true,
   bridgeWs: null,
   mediaRecorder: null,
   mediaStream: null,
@@ -96,6 +98,7 @@ export interface HudApi {
   idleMs: number
   isLocked: boolean
   faceScan: boolean
+  faceUnlockEnabled: boolean
   setAvatarState: (s: string) => void
   setWaveState: (s: string) => void
   setDisplayMode: (m: DisplayMode) => void
@@ -117,6 +120,7 @@ export interface HudApi {
   setIsLocked: (locked: boolean) => void
   setFaceScan: (active: boolean) => void
   startFaceScanTimer: (onTimeout: () => void) => void
+  setFaceUnlockEnabled: (on: boolean) => void
   setBridgeWs: (ws: WebSocket | null) => void
 }
 
@@ -392,6 +396,14 @@ export function useHudState(): HudApi {
     [force],
   )
 
+  const setFaceUnlockEnabled = useCallback(
+    (on: boolean) => {
+      ref.current.faceUnlockEnabled = on
+      force()
+    },
+    [force],
+  )
+
   // Clean up timers and media on unmount
   useEffect(() => {
     return () => {
@@ -441,6 +453,7 @@ export function useHudState(): HudApi {
       idleMs: ref.current.idleMs,
       isLocked: ref.current.isLocked,
       faceScan: ref.current.faceScan,
+      faceUnlockEnabled: ref.current.faceUnlockEnabled,
       setAvatarState,
       setWaveState,
       setDisplayMode,
@@ -462,6 +475,7 @@ export function useHudState(): HudApi {
       setIsLocked,
       setFaceScan,
       startFaceScanTimer,
+      setFaceUnlockEnabled,
       setBridgeWs,
     }
   }
@@ -485,6 +499,7 @@ export function useHudState(): HudApi {
   api.idleMs = ref.current.idleMs
   api.isLocked = ref.current.isLocked
   api.faceScan = ref.current.faceScan
+  api.faceUnlockEnabled = ref.current.faceUnlockEnabled
 
   return api
 }
