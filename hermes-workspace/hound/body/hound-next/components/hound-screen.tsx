@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { LockScreen } from "./lock-screen"
+import { useHudState } from "./hound-hud-state"
 import { HudFullBleed } from "./hound-hud"
 
 const RED = "#e8232a"
@@ -12,15 +14,14 @@ const YELLOW = "#ece49a"
 const BOOT_WAIT_FILL_MS = 1500
 const BOOT_ARM_FILL_MS = 900
 
-// Login credentials
-const VALID_USER = "ollie"
-const VALID_PASS = "skenn2000"
+
 
 type Screen = "boot" | "login" | "granted" | "hud"
 
 export function HoundScreen() {
   const [screen, setScreen] = useState<Screen>("boot")
   const [bootArmed, setBootArmed] = useState(false)
+  const s = useHudState()
 
   const goToLogin = useCallback(() => setScreen("login"), [])
   const goToGranted = useCallback(() => setScreen("granted"), [])
@@ -109,7 +110,7 @@ export function HoundScreen() {
           {screen === "boot" ? (
             <BootCluster armed={bootArmed} onComplete={goToLogin} />
           ) : screen === "login" ? (
-            <LoginFields onLogin={goToGranted} />
+            <LockScreen isLocked={true} onUnlocked={goToGranted} faceScan={s.faceScan} />
           ) : (
             <GrantedScreen onComplete={goToHud} />
           )}
@@ -198,121 +199,6 @@ function LoadingBar({
       <div
         className="h-full rounded-[1px]"
         style={{ width: `${progress}%`, backgroundColor: RED, boxShadow: `0 0 8px ${RED}` }}
-      />
-    </div>
-  )
-}
-
-function LoginFields({ onLogin }: { onLogin: (user: string, pass: string) => void }) {
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState("")
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (username.trim() === VALID_USER && password === VALID_PASS) {
-      setError("")
-      onLogin(username.trim(), password)
-    } else {
-      setError("ACCESS DENIED")
-    }
-  }
-
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex w-[50%] flex-col mx-auto gap-[1.8cqh] mt-[4cqh]"
-      style={{ position: "relative" }}
-    >
-      {/* Invisible default submit button: Chromium only does implicit
-          Enter-submission when a submit button exists. Kept 1x1, opacity 0,
-          untabbable, unclickable — purely a submit trigger. */}
-      <button
-        type="submit"
-        aria-hidden="true"
-        tabIndex={-1}
-        style={{
-          position: "absolute",
-          width: 1,
-          height: 1,
-          opacity: 0,
-          overflow: "hidden",
-          border: 0,
-          padding: 0,
-          margin: -1,
-          pointerEvents: "none",
-        }}
-      >
-        submit
-      </button>
-      {/* Username */}
-      <LoginField
-        label="USERNAME:"
-        value={username}
-        onChange={setUsername}
-        type="text"
-        placeholder="enter username"
-      />
-      {/* Password */}
-      <LoginField
-        label="PASSWORD:"
-        value={password}
-        onChange={setPassword}
-        type="password"
-        placeholder="enter password"
-      />
-      {/* Error message */}
-      {error && (
-        <p
-          className="w-full text-center font-[family-name:var(--font-dot-gothic)] leading-none"
-          style={{ color: RED, fontSize: "3cqw", textShadow: `0 0 8px ${RED}`, marginTop: "-0.5cqh" }}
-        >
-          {error}
-        </p>
-      )}
-
-    </form>
-  )
-}
-
-function LoginField({
-  label,
-  value,
-  onChange,
-  type,
-  placeholder,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type: string
-  placeholder: string
-}) {
-  return (
-    <div
-      className="flex items-center gap-[0.9cqw] rounded-[2px] border-2 px-[1.2cqw] py-[0.75cqh] font-[family-name:var(--font-dot-gothic)]"
-      style={{ borderColor: RED, boxShadow: `0 0 5px ${RED}44` }}
-    >
-      <span
-        className="whitespace-nowrap leading-none"
-        style={{ color: RED, fontSize: "3cqw", textShadow: `0 0 6px ${RED}55` }}
-      >
-        {label}
-      </span>
-      {/* Actual input field */}
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 bg-transparent outline-none border-none text-red-[#e8232a] font-[family-name:var(--font-dot-gothic)] placeholder:text-red-[#e8232a66]"
-        style={{
-          fontSize: "3cqw",
-          caretColor: RED,
-          color: RED,
-        }}
-        placeholder={placeholder}
-        autoFocus
-        autoComplete="off"
       />
     </div>
   )
