@@ -14,9 +14,10 @@ interface Props {
   isLocked: boolean
   onUnlocked: () => void
   faceScan?: boolean
+  showPassword?: boolean
 }
 
-export function LockScreen({ isLocked, onUnlocked, faceScan }: Props) {
+export function LockScreen({ isLocked, onUnlocked, faceScan, showPassword }: Props) {
   const [password, setPassword] = useState("")
   const [time, setTime] = useState("")
   const [error, setError] = useState("")
@@ -175,55 +176,57 @@ export function LockScreen({ isLocked, onUnlocked, faceScan }: Props) {
       </div>
 
       {/* Password form */}
-      <form onSubmit={handleSubmit} className="w-full max-w-xs px-8">
-        <div className="mb-4 text-center text-[0.85rem] uppercase tracking-wider" style={{ color: "rgba(232,35,42,0.7)" }}>
-          ENTER PASSWORD TO UNLOCK
-        </div>
-        <input
-          ref={inputRef}
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full text-center outline-none"
-          style={{
-            background: "rgba(3,8,9,0.8)",
-            border: "1px solid rgba(232,35,42,0.42)",
-            borderRadius: "3px",
-            color: "#e8a0a0",
-            fontSize: "clamp(12px, 1.5cqw, 20px)",
-            padding: "8px 12px",
-            letterSpacing: "0.2em",
-          }}
-          placeholder="••••••••"
-          autoComplete="off"
-          autoFocus
-        />
-        <div className="mt-4 flex justify-center">
-          <button
-            type="submit"
-            className="w-full"
+      {showPassword && (
+        <form onSubmit={handleSubmit} className="w-full max-w-xs px-8">
+          <div className="mb-4 text-center text-[0.85rem] uppercase tracking-wider" style={{ color: "rgba(232,35,42,0.7)" }}>
+            ENTER PASSWORD TO UNLOCK
+          </div>
+          <input
+            ref={inputRef}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full text-center outline-none"
             style={{
-              background: "rgba(232,35,42,0.12)",
+              background: "rgba(3,8,9,0.8)",
               border: "1px solid rgba(232,35,42,0.42)",
               borderRadius: "3px",
-              color: "#e8232a",
-              fontSize: "clamp(10px, 1.2cqw, 16px)",
-              padding: "8px 16px",
-              letterSpacing: "0.15em",
-              cursor: "pointer",
+              color: "#e8a0a0",
+              fontSize: "clamp(12px, 1.5cqw, 20px)",
+              padding: "8px 12px",
+              letterSpacing: "0.2em",
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.22)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.12)")}
-          >
-            UNLOCK
-          </button>
-        </div>
-        {error && (
-          <div className="mt-3 text-center" style={{ color: "#e8232a", fontSize: "0.75rem" }}>
-            {error}
+            placeholder="••••••••"
+            autoComplete="off"
+            autoFocus
+          />
+          <div className="mt-4 flex justify-center">
+            <button
+              type="submit"
+              className="w-full"
+              style={{
+                background: "rgba(232,35,42,0.12)",
+                border: "1px solid rgba(232,35,42,0.42)",
+                borderRadius: "3px",
+                color: "#e8232a",
+                fontSize: "clamp(10px, 1.2cqw, 16px)",
+                padding: "8px 16px",
+                letterSpacing: "0.15em",
+                cursor: "pointer",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.22)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.12)")}
+            >
+              UNLOCK
+            </button>
           </div>
-        )}
-      </form>
+          {error && (
+            <div className="mt-3 text-center" style={{ color: "#e8232a", fontSize: "0.75rem" }}>
+              {error}
+            </div>
+          )}
+        </form>
+      )}
 
       {/* Status */}
       <div

@@ -353,7 +353,7 @@ export function HudFullBleed() {
               <span>RECONNECTING... (attempt {attemptRef.current + 1})</span>
             </div>
           )}
-          <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} faceScan={s.faceScan} />
+          <LockScreen isLocked={isLocked} onUnlocked={handleUnlock} faceScan={s.faceScan} showPassword={!s.faceScan} />
         </div>
 
         {/* Screensaver idle tracking removed — idle logic now in HudFullBleed (always runs) */}

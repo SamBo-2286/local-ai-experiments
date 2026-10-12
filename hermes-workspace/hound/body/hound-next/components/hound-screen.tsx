@@ -1,8 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { LockScreen } from "./lock-screen"
-import { useHudState } from "./hound-hud-state"
 import { HudFullBleed } from "./hound-hud"
 
 const RED = "#e8232a"
@@ -21,7 +19,6 @@ type Screen = "boot" | "login" | "granted" | "hud"
 export function HoundScreen() {
   const [screen, setScreen] = useState<Screen>("boot")
   const [bootArmed, setBootArmed] = useState(false)
-  const s = useHudState()
 
   const goToLogin = useCallback(() => setScreen("login"), [])
   const goToGranted = useCallback(() => setScreen("granted"), [])
@@ -110,7 +107,7 @@ export function HoundScreen() {
           {screen === "boot" ? (
             <BootCluster armed={bootArmed} onComplete={goToLogin} />
           ) : screen === "login" ? (
-            <LockScreen isLocked={true} onUnlocked={goToGranted} faceScan={s.faceScan} />
+            <LoginFields onComplete={goToGranted} />
           ) : (
             <GrantedScreen onComplete={goToHud} />
           )}
@@ -239,6 +236,80 @@ function GrantedScreen({ onComplete }: { onComplete: () => void }) {
         ACCESS GRANTED
       </p>
     </div>
+  )
+}
+
+const VALID_USER = "ollie"
+const VALID_PASS = "***"
+
+function LoginField({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-[0.85rem] uppercase tracking-wider" style={{ color: "#e8a0a0", fontFamily: "var(--font-vt323)" }}>
+        {children}
+      </span>
+      <input
+        type="text"
+        className="w-full text-center outline-none"
+        style={{
+          background: "rgba(3,8,9,0.8)",
+          border: "1px solid rgba(232,35,42,0.42)",
+          borderRadius: "3px",
+          color: "#e8a0a0",
+          fontSize: "1em",
+          padding: "4px 8px",
+          letterSpacing: "0.2em",
+        }}
+      />
+    </div>
+  )
+}
+
+function LoginFields({ onComplete }: { onComplete: () => void }) {
+  const [error, setError] = useState("")
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (VALID_PASS) {
+      onComplete()
+    } else {
+      setError("ACCESS DENIED")
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full max-w-xs px-8">
+      <div className="mb-4 text-center text-[0.85rem] uppercase tracking-wider" style={{ color: "rgba(232,35,42,0.7)" }}>
+        SYSTEM LOGIN
+      </div>
+      <LoginField>USERNAME</LoginField>
+      <LoginField>PASSWORD</LoginField>
+      <div className="mt-4 flex justify-center">
+        <button
+          type="submit"
+          style={{
+            background: "rgba(232,35,42,0.12)",
+            border: "1px solid rgba(232,35,42,0.42)",
+            borderRadius: "3px",
+            color: "#e8232a",
+            fontSize: "1em",
+            padding: "8px 16px",
+            letterSpacing: "0.15em",
+            cursor: "pointer",
+            fontFamily: "var(--font-vt323)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.22)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(232,35,42,0.12)")}
+        >
+          LOGIN
+        </button>
+      </div>
+      {error && (
+        <div className="mt-3 text-center" style={{ color: "#e8232a", fontSize: "0.75rem" }}>
+          {error}
+        </div>
+      )}
+    </form>
   )
 }
 
