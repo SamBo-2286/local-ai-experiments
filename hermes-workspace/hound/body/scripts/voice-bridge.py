@@ -49,6 +49,8 @@ detector_last_update = 0
 DETECTION_FILE = "/tmp/hound-detection.json"
 DETECTION_POLL_INTERVAL = 2.0  # seconds
 
+camera_state = "inactive"  # Track locally to prevent redundant command spam
+
 
 async def convert_webm_to_wav(webm_bytes: bytes) -> bytes:
     try:
@@ -247,6 +249,7 @@ async def handle_client(websocket):
     Events from wake-word-detector are forwarded to HUD clients.
     detectorCommand messages are relayed to detector-server.
     """
+    global camera_state
     print(f"Client connected: {websocket.remote_address}", flush=True)
     
     try:
@@ -279,13 +282,23 @@ async def handle_client(websocket):
             # Camera command — toggle MJPEG stream on body
             if msg_type == 'cameraCommand':
                 command = msg.get('command', '')
+                
+                # Guard: ignore redundant commands to prevent idle-timer spam & feedback loops
+                if command == "start" and camera_state == "active":
+                    print(f"[bridge] ignoring redundant start", flush=True)
+                    await websocket.send(json.dumps({"type": "cameraStatus", "state": "active"}))
+                    continue
+                if command == "stop" and camera_state == "inactive":
+                    print(f"[bridge] ignoring redundant stop", flush=True)
+                    await websocket.send(json.dumps({"type": "cameraStatus", "state": "inactive"}))
+                    continue
+                
                 print(f'[bridge] cameraCommand: {command}', flush=True)
                 result = await handle_camera_command(command)
-                # Determine state string for HUD consumer
-                state = "active" if command == "start" else "inactive"
-                await websocket.send(json.dumps({
+                camera_state = "active" if command == "start" else "inactive"
+                await broadcast_to_hud_clients(json.dumps({
                     "type": "cameraStatus",
-                    "state": state,
+                    "state": camera_state,
                     "status": result.get("status")
                 }))
                 continue
