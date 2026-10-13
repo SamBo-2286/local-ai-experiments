@@ -233,6 +233,11 @@ export function useHudState(): HudApi {
 
   const setCameraOn = useCallback(
     (on: boolean) => {
+      // Guard: prevent feedback loop. If state already matches, don't re-send
+      // cameraCommand. Without this, cameraStatus broadcasts from the bridge
+      // would trigger setCameraOn again → cameraCommand → cameraStatus → …
+      if (ref.current.cameraOn === on) return
+
       ref.current.cameraOn = on
       force()
       // Signal body to stop/start MJPEG stream via bridge WS
