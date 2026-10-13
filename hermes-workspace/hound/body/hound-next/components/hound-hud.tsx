@@ -92,6 +92,19 @@ export function HudFullBleed() {
     }
   }, [resetIdle, s])
 
+  // Start MJPEG stream on initial HUD mount.
+  // The cameraOn state initializes to true, but setCameraOn(true) is never
+  // called on mount, so the WebSocket command to start the stream is never
+  // sent. We toggle false→true to bypass the Phase 2.1 guard in setCameraOn
+  // (line 239 of hound-hud-state.tsx) which short-circuits if the state
+  // already matches. The guard must be preserved to prevent the feedback loop
+  // from Phase 2.1 — it is not removed here.
+  useEffect(() => {
+    s.setCameraOn(false)
+    s.setCameraOn(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Frame counter: increments during thinking/speaking, resets to 1
   useEffect(() => {
     const id = setInterval(() => {
