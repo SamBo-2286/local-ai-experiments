@@ -90,6 +90,10 @@ class SharedEncoder:
         self._lock = threading.Lock()
 
     def start(self):
+        # Guard: don't spawn duplicate reader threads if one is already running
+        if getattr(self, '_reader', None) and self._reader.is_alive():
+            log("encoder already running")
+            return
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
         log("shared encoder started")
