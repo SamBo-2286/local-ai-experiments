@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-const UPSTREAM = "http://127.0.0.1:8082/cam-stream"
+const UPSTREAM = "http://127.0.0.1:8084/"
 
 // MJPEG multipart is a long-lived stream — never let Next cache or buffer it.
 export const dynamic = "force-dynamic"
